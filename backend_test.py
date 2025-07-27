@@ -990,12 +990,13 @@ class PUCRSBackendTester:
     
     def run_all_tests(self):
         """Run complete test suite"""
-        print("🚀 Starting PUCRS Gamification Backend Test Suite")
+        print("🚀 Starting PUCRS Gamification Backend Test Suite - ENHANCED FEATURES")
         print(f"Testing backend at: {BACKEND_URL}")
         print("="*60)
         
-        # Run tests in logical order
+        # Run tests in logical order - Basic features first, then enhanced features
         tests = [
+            # Basic functionality tests
             self.test_user_registration,
             self.test_user_login,
             self.test_profile_access,
@@ -1004,7 +1005,20 @@ class PUCRSBackendTester:
             self.test_solution_retrieval,
             self.test_evaluation_system,
             self.test_leaderboard,
-            self.test_admin_statistics
+            
+            # Enhanced features tests (HIGH PRIORITY)
+            self.test_advanced_search_system,
+            self.test_badge_system,
+            self.test_notification_system,
+            
+            # Enhanced features tests (MEDIUM PRIORITY)
+            self.test_challenge_crud_operations,
+            self.test_user_management,
+            self.test_file_upload_system,
+            
+            # Enhanced features tests (LOW PRIORITY)
+            self.test_admin_statistics,
+            self.test_advanced_filtering
         ]
         
         for test in tests:
