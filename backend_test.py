@@ -159,9 +159,13 @@ class PUCRSBackendTester:
         """Test user login functionality"""
         print("\n🔑 Testing User Login...")
         
+        if not self.admin_user:
+            self.results.log_fail("Valid Login", "No admin user available for testing")
+            return False
+        
         # Test valid login
         login_data = {
-            "email": "admin@pucrs.edu.br",
+            "email": self.admin_user["email"],
             "password": "AdminPass123!"
         }
         
@@ -174,11 +178,13 @@ class PUCRSBackendTester:
             self.results.log_fail("Valid Login", "Missing access token")
             return False
             
+        # Update admin token with fresh login token
+        self.admin_token = response["access_token"]
         self.results.log_pass("Valid Login")
         
         # Test invalid credentials
         invalid_login = {
-            "email": "admin@pucrs.edu.br",
+            "email": self.admin_user["email"],
             "password": "WrongPassword"
         }
         
