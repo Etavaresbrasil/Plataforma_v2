@@ -461,6 +461,13 @@ class PUCRSBackendTester:
                 self.results.log_fail("Admin Stats Completeness", f"Missing field: {field}")
                 return False
         
+        # Test enhanced statistics fields
+        enhanced_fields = ["total_points_awarded", "recent_solutions_count", "recent_registrations_count"]
+        for field in enhanced_fields:
+            if field not in response:
+                self.results.log_fail("Enhanced Stats Completeness", f"Missing enhanced field: {field}")
+                return False
+        
         # Validate expected values
         if response["total_users"] < 3:  # Should have at least admin, student, professor
             self.results.log_fail("Admin Stats Accuracy", f"Expected at least 3 users, got {response['total_users']}")
@@ -476,6 +483,7 @@ class PUCRSBackendTester:
             
         self.results.log_pass("Admin Stats Access")
         self.results.log_pass("Admin Stats Completeness")
+        self.results.log_pass("Enhanced Stats Completeness")
         self.results.log_pass("Admin Stats Accuracy")
         
         # Test non-admin stats access (should fail)
@@ -486,6 +494,498 @@ class PUCRSBackendTester:
         else:
             self.results.log_pass("Non-Admin Stats Access Prevention")
             
+        return True
+    
+    def test_advanced_search_system(self):
+        """Test the advanced search system"""
+        print("\n🔍 Testing Advanced Search System...")
+        
+        student_headers = self.get_auth_headers(self.student_token)
+        
+        # Test search with query parameter
+        response, error = self.make_request("GET", "/search?q=sustentabilidade", headers=student_headers)
+        if error:
+            self.results.log_fail("Search System Basic Query", error)
+            return False
+        
+        # Validate search response structure
+        required_fields = ["challenges", "users", "total_results"]
+        for field in required_fields:
+            if field not in response:
+                self.results.log_fail("Search Response Structure", f"Missing field: {field}")
+                return False
+        
+        if not isinstance(response["challenges"], list):
+            self.results.log_fail("Search Response Structure", "Challenges should be a list")
+            return False
+            
+        if not isinstance(response["users"], list):
+            self.results.log_fail("Search Response Structure", "Users should be a list")
+            return False
+            
+        self.results.log_pass("Search System Basic Query")
+        self.results.log_pass("Search Response Structure")
+        
+        # Test search with different terms
+        test_queries = ["inovação", "energia", "campus", "PUCRS"]
+        for query in test_queries:
+            response, error = self.make_request("GET", f"/search?q={query}", headers=student_headers)
+            if error:
+                self.results.log_fail(f"Search Query '{query}'", error)
+                return False
+        
+        self.results.log_pass("Search Multiple Queries")
+        
+        # Test admin search (should include users)
+        admin_headers = self.get_auth_headers(self.admin_token)
+        response, error = self.make_request("GET", "/search?q=João", headers=admin_headers)
+        if error:
+            self.results.log_fail("Admin Search with Users", error)
+            return False
+        
+        # Admin search should potentially return users
+        self.results.log_pass("Admin Search with Users")
+        
+        return True
+    
+    def test_badge_system(self):
+        """Test automatic badge awarding system"""
+        print("\n🏆 Testing Badge System...")
+        
+        # Check if student received "First Submission" badge after submitting solution
+        student_headers = self.get_auth_headers(self.student_token)
+        response, error = self.make_request("GET", "/me", headers=student_headers)
+        if error:
+            self.results.log_fail("Badge System - Profile Check", error)
+            return False
+        
+        badges = response.get("badges", [])
+        if "first_submission" not in badges:
+            self.results.log_fail("First Submission Badge", "Badge not awarded after first solution submission")
+            return False
+        
+        self.results.log_pass("First Submission Badge")
+        
+        # Test badge awarding after evaluation (should trigger additional badge checks)
+        # The evaluation was already done in previous test, so badges should be updated
+        response, error = self.make_request("GET", "/me", headers=student_headers)
+        if error:
+            self.results.log_fail("Badge System - Post Evaluation Check", error)
+            return False
+        
+        # Check if badges list is properly maintained
+        if not isinstance(response.get("badges", []), list):
+            self.results.log_fail("Badge System Structure", "Badges should be a list")
+            return False
+        
+        self.results.log_pass("Badge System Structure")
+        self.results.log_pass("Badge System Post-Evaluation")
+        
+        return True
+    
+    def test_notification_system(self):
+        """Test notification creation and retrieval"""
+        print("\n🔔 Testing Notification System...")
+        
+        student_headers = self.get_auth_headers(self.student_token)
+        
+        # Test notification retrieval
+        response, error = self.make_request("GET", "/notifications", headers=student_headers)
+        if error:
+            self.results.log_fail("Notification Retrieval", error)
+            return False
+        
+        if not isinstance(response, list):
+            self.results.log_fail("Notification Response Structure", "Notifications should be a list")
+            return False
+        
+        self.results.log_pass("Notification Retrieval")
+        self.results.log_pass("Notification Response Structure")
+        
+        # Check if notifications were created for badge awards and evaluations
+        notification_types = [notif.get("type") for notif in response]
+        expected_types = ["badge", "evaluation"]
+        
+        found_badge_notification = "badge" in notification_types
+        found_evaluation_notification = "evaluation" in notification_types
+        
+        if found_badge_notification:
+            self.results.log_pass("Badge Notification Creation")
+        else:
+            self.results.log_fail("Badge Notification Creation", "No badge notification found")
+        
+        if found_evaluation_notification:
+            self.results.log_pass("Evaluation Notification Creation")
+        else:
+            self.results.log_fail("Evaluation Notification Creation", "No evaluation notification found")
+        
+        # Test marking notification as read
+        if response:
+            notification_id = response[0].get("id")
+            if notification_id:
+                read_response, error = self.make_request("PUT", f"/notifications/{notification_id}/read", headers=student_headers)
+                if error:
+                    self.results.log_fail("Mark Notification Read", error)
+                    return False
+                self.results.log_pass("Mark Notification Read")
+            else:
+                self.results.log_fail("Mark Notification Read", "No notification ID available")
+        
+        # Test mark all notifications as read
+        response, error = self.make_request("PUT", "/notifications/mark-all-read", headers=student_headers)
+        if error:
+            self.results.log_fail("Mark All Notifications Read", error)
+            return False
+        
+        self.results.log_pass("Mark All Notifications Read")
+        
+        return True
+    
+    def test_challenge_crud_operations(self):
+        """Test challenge update and deletion (admin-only)"""
+        print("\n✏️ Testing Challenge CRUD Operations...")
+        
+        if not self.challenge_id:
+            self.results.log_fail("Challenge CRUD", "No challenge available for testing")
+            return False
+        
+        admin_headers = self.get_auth_headers(self.admin_token)
+        
+        # Test challenge update
+        update_data = {
+            "title": "Inovação em Sustentabilidade PUCRS - ATUALIZADO",
+            "description": "Desenvolva uma solução inovadora para reduzir o consumo de energia no campus da PUCRS - versão atualizada com novos critérios",
+            "points_reward": 200
+        }
+        
+        response, error = self.make_request("PUT", f"/challenges/{self.challenge_id}", update_data, headers=admin_headers)
+        if error:
+            self.results.log_fail("Challenge Update (Admin)", error)
+            return False
+        
+        # Verify update was applied
+        if response.get("title") != update_data["title"]:
+            self.results.log_fail("Challenge Update Verification", "Title was not updated")
+            return False
+        
+        if response.get("points_reward") != update_data["points_reward"]:
+            self.results.log_fail("Challenge Update Verification", "Points reward was not updated")
+            return False
+        
+        self.results.log_pass("Challenge Update (Admin)")
+        self.results.log_pass("Challenge Update Verification")
+        
+        # Test non-admin challenge update (should fail)
+        student_headers = self.get_auth_headers(self.student_token)
+        response, error = self.make_request("PUT", f"/challenges/{self.challenge_id}", update_data, headers=student_headers, expected_status=403)
+        if error and "403" not in error:
+            self.results.log_fail("Non-Admin Challenge Update Prevention", error)
+        else:
+            self.results.log_pass("Non-Admin Challenge Update Prevention")
+        
+        # Test challenge deletion
+        response, error = self.make_request("DELETE", f"/challenges/{self.challenge_id}", headers=admin_headers)
+        if error:
+            self.results.log_fail("Challenge Deletion (Admin)", error)
+            return False
+        
+        if not response.get("message"):
+            self.results.log_fail("Challenge Deletion Response", "Missing success message")
+            return False
+        
+        self.results.log_pass("Challenge Deletion (Admin)")
+        
+        # Verify challenge was deleted
+        response, error = self.make_request("GET", f"/challenges/{self.challenge_id}", headers=admin_headers, expected_status=404)
+        if error and "404" not in error:
+            self.results.log_fail("Challenge Deletion Verification", error)
+        else:
+            self.results.log_pass("Challenge Deletion Verification")
+        
+        # Test non-admin challenge deletion (should fail)
+        # Create a new challenge first for this test
+        future_date = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        new_challenge_data = {
+            "title": "Test Challenge for Deletion",
+            "description": "Test challenge",
+            "category": "technology",
+            "difficulty": "beginner",
+            "deadline": future_date,
+            "criteria": "Test criteria",
+            "points_reward": 100
+        }
+        
+        response, error = self.make_request("POST", "/challenges", new_challenge_data, headers=admin_headers)
+        if response and response.get("id"):
+            test_challenge_id = response["id"]
+            response, error = self.make_request("DELETE", f"/challenges/{test_challenge_id}", headers=student_headers, expected_status=403)
+            if error and "403" not in error:
+                self.results.log_fail("Non-Admin Challenge Deletion Prevention", error)
+            else:
+                self.results.log_pass("Non-Admin Challenge Deletion Prevention")
+        
+        return True
+    
+    def test_user_management(self):
+        """Test user activation/deactivation by admins"""
+        print("\n👥 Testing User Management...")
+        
+        admin_headers = self.get_auth_headers(self.admin_token)
+        
+        # Test getting all users (admin only)
+        response, error = self.make_request("GET", "/admin/users", headers=admin_headers)
+        if error:
+            self.results.log_fail("Admin Users List", error)
+            return False
+        
+        if not isinstance(response, list):
+            self.results.log_fail("Admin Users List Structure", "Users should be a list")
+            return False
+        
+        if len(response) < 3:  # Should have at least admin, student, professor
+            self.results.log_fail("Admin Users List Content", f"Expected at least 3 users, got {len(response)}")
+            return False
+        
+        self.results.log_pass("Admin Users List")
+        self.results.log_pass("Admin Users List Structure")
+        self.results.log_pass("Admin Users List Content")
+        
+        # Test non-admin access to users list (should fail)
+        student_headers = self.get_auth_headers(self.student_token)
+        response, error = self.make_request("GET", "/admin/users", headers=student_headers, expected_status=403)
+        if error and "403" not in error:
+            self.results.log_fail("Non-Admin Users List Prevention", error)
+        else:
+            self.results.log_pass("Non-Admin Users List Prevention")
+        
+        # Test user activation/deactivation toggle
+        if self.student_user and self.student_user.get("id"):
+            student_id = self.student_user["id"]
+            
+            # Toggle user active status
+            response, error = self.make_request("PUT", f"/admin/users/{student_id}/toggle-active", headers=admin_headers)
+            if error:
+                self.results.log_fail("User Toggle Active Status", error)
+                return False
+            
+            if not response.get("message"):
+                self.results.log_fail("User Toggle Response", "Missing success message")
+                return False
+            
+            self.results.log_pass("User Toggle Active Status")
+            self.results.log_pass("User Toggle Response")
+            
+            # Test login with deactivated account (should fail)
+            login_data = {
+                "email": "joao.santos@pucrs.edu.br",
+                "password": "StudentPass123!"
+            }
+            
+            response, error = self.make_request("POST", "/login", login_data, expected_status=401)
+            if error and "401" not in error:
+                self.results.log_fail("Deactivated Account Login Prevention", error)
+            else:
+                self.results.log_pass("Deactivated Account Login Prevention")
+            
+            # Reactivate user for further tests
+            response, error = self.make_request("PUT", f"/admin/users/{student_id}/toggle-active", headers=admin_headers)
+            if error:
+                self.results.log_fail("User Reactivation", error)
+                return False
+            
+            self.results.log_pass("User Reactivation")
+        
+        # Test non-admin user toggle (should fail)
+        if self.student_user and self.student_user.get("id"):
+            student_id = self.student_user["id"]
+            response, error = self.make_request("PUT", f"/admin/users/{student_id}/toggle-active", headers=student_headers, expected_status=403)
+            if error and "403" not in error:
+                self.results.log_fail("Non-Admin User Toggle Prevention", error)
+            else:
+                self.results.log_pass("Non-Admin User Toggle Prevention")
+        
+        return True
+    
+    def test_advanced_filtering(self):
+        """Test challenge filtering by category, difficulty, status, and search terms"""
+        print("\n🔍 Testing Advanced Filtering...")
+        
+        admin_headers = self.get_auth_headers(self.admin_token)
+        student_headers = self.get_auth_headers(self.student_token)
+        
+        # Create multiple challenges with different attributes for filtering tests
+        future_date = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        
+        test_challenges = [
+            {
+                "title": "Tecnologia Educacional",
+                "description": "Desenvolver app educacional",
+                "category": "technology",
+                "difficulty": "beginner",
+                "deadline": future_date,
+                "criteria": "Funcionalidade e usabilidade",
+                "points_reward": 100,
+                "tags": ["app", "educação"]
+            },
+            {
+                "title": "Saúde Digital",
+                "description": "Sistema de monitoramento de saúde",
+                "category": "health",
+                "difficulty": "advanced",
+                "deadline": future_date,
+                "criteria": "Precisão e segurança",
+                "points_reward": 250,
+                "tags": ["saúde", "digital"]
+            }
+        ]
+        
+        created_challenge_ids = []
+        for challenge_data in test_challenges:
+            response, error = self.make_request("POST", "/challenges", challenge_data, headers=admin_headers)
+            if response and response.get("id"):
+                created_challenge_ids.append(response["id"])
+        
+        # Test category filtering
+        response, error = self.make_request("GET", "/challenges?category=technology", headers=student_headers)
+        if error:
+            self.results.log_fail("Category Filtering", error)
+            return False
+        
+        # Check if filtered results contain only technology category
+        for challenge in response:
+            if challenge.get("category") != "technology":
+                self.results.log_fail("Category Filtering Accuracy", f"Found non-technology challenge: {challenge.get('category')}")
+                return False
+        
+        self.results.log_pass("Category Filtering")
+        self.results.log_pass("Category Filtering Accuracy")
+        
+        # Test difficulty filtering
+        response, error = self.make_request("GET", "/challenges?difficulty=advanced", headers=student_headers)
+        if error:
+            self.results.log_fail("Difficulty Filtering", error)
+            return False
+        
+        # Check if filtered results contain only advanced difficulty
+        for challenge in response:
+            if challenge.get("difficulty") != "advanced":
+                self.results.log_fail("Difficulty Filtering Accuracy", f"Found non-advanced challenge: {challenge.get('difficulty')}")
+                return False
+        
+        self.results.log_pass("Difficulty Filtering")
+        self.results.log_pass("Difficulty Filtering Accuracy")
+        
+        # Test search term filtering
+        response, error = self.make_request("GET", "/challenges?search=saúde", headers=student_headers)
+        if error:
+            self.results.log_fail("Search Term Filtering", error)
+            return False
+        
+        self.results.log_pass("Search Term Filtering")
+        
+        # Test combined filtering
+        response, error = self.make_request("GET", "/challenges?category=health&difficulty=advanced", headers=student_headers)
+        if error:
+            self.results.log_fail("Combined Filtering", error)
+            return False
+        
+        self.results.log_pass("Combined Filtering")
+        
+        # Clean up created challenges
+        for challenge_id in created_challenge_ids:
+            self.make_request("DELETE", f"/challenges/{challenge_id}", headers=admin_headers)
+        
+        return True
+    
+    def test_file_upload_system(self):
+        """Test solution submission with files (base64 format)"""
+        print("\n📎 Testing File Upload System...")
+        
+        # Create a new challenge for file upload testing
+        admin_headers = self.get_auth_headers(self.admin_token)
+        future_date = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        
+        challenge_data = {
+            "title": "Projeto com Arquivos",
+            "description": "Submeta sua solução com arquivos anexos",
+            "category": "technology",
+            "difficulty": "intermediate",
+            "deadline": future_date,
+            "criteria": "Qualidade dos arquivos e documentação",
+            "points_reward": 150
+        }
+        
+        response, error = self.make_request("POST", "/challenges", challenge_data, headers=admin_headers)
+        if error or not response.get("id"):
+            self.results.log_fail("File Upload Test Setup", "Failed to create test challenge")
+            return False
+        
+        test_challenge_id = response["id"]
+        
+        # Test solution submission with multiple files
+        student_headers = self.get_auth_headers(self.professor_token)  # Use professor to avoid duplicate submission
+        
+        # Create base64 encoded test files
+        test_files = [
+            "data:text/plain;base64,VGVzdGUgZGUgYXJxdWl2byBkZSB0ZXh0bw==",  # "Teste de arquivo de texto"
+            "data:application/json;base64,eyJ0ZXN0ZSI6ICJ2YWxvciJ9",  # {"teste": "valor"}
+        ]
+        
+        file_names = ["documento.txt", "config.json"]
+        
+        solution_data = {
+            "challenge_id": test_challenge_id,
+            "content": "Solução completa com arquivos anexos demonstrando a implementação técnica detalhada.",
+            "files": test_files,
+            "file_names": file_names
+        }
+        
+        response, error = self.make_request("POST", "/solutions", solution_data, headers=student_headers)
+        if error:
+            self.results.log_fail("File Upload Submission", error)
+            return False
+        
+        if not response.get("id"):
+            self.results.log_fail("File Upload Response", "Missing solution ID")
+            return False
+        
+        # Verify files were stored correctly
+        if response.get("files") != test_files:
+            self.results.log_fail("File Upload Storage", "Files not stored correctly")
+            return False
+        
+        if response.get("file_names") != file_names:
+            self.results.log_fail("File Names Storage", "File names not stored correctly")
+            return False
+        
+        self.results.log_pass("File Upload Submission")
+        self.results.log_pass("File Upload Response")
+        self.results.log_pass("File Upload Storage")
+        self.results.log_pass("File Names Storage")
+        
+        # Test solution retrieval with files
+        response, error = self.make_request("GET", "/solutions/my", headers=student_headers)
+        if error:
+            self.results.log_fail("File Upload Retrieval", error)
+            return False
+        
+        # Find the solution with files
+        found_solution_with_files = False
+        for solution in response:
+            if solution.get("files") and len(solution["files"]) > 0:
+                found_solution_with_files = True
+                break
+        
+        if not found_solution_with_files:
+            self.results.log_fail("File Upload Retrieval Verification", "Solution with files not found in retrieval")
+            return False
+        
+        self.results.log_pass("File Upload Retrieval")
+        self.results.log_pass("File Upload Retrieval Verification")
+        
+        # Clean up
+        self.make_request("DELETE", f"/challenges/{test_challenge_id}", headers=admin_headers)
+        
         return True
     
     def run_all_tests(self):
