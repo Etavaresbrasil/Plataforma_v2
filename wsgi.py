@@ -22,14 +22,14 @@ if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
 
 # Set environment variables for production
-os.environ.setdefault('MONGO_URL', 'mongodb+srv://usuario:senha@cluster.mongodb.net/')
+os.environ.setdefault('MONGO_URL', 'mongodb+srv://edsonvivo2020:<db_password>@cluster0.dc0orfj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
 os.environ.setdefault('DB_NAME', 'pucrs_gamification')
 os.environ.setdefault('SECRET_KEY', 'sua_chave_jwt_super_segura_256_bits_2025')
 
 # Import the FastAPI application
 import_error = None
 try:
-    from server import app
+    from backend.server import app
     application = app
     print("PUCRS Gamification System loaded successfully!")
 except ImportError as import_err:
