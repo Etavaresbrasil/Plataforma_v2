@@ -200,6 +200,10 @@ class PUCRSBackendTester:
         """Test profile access with JWT tokens"""
         print("\n👤 Testing Profile Access...")
         
+        if not self.admin_token:
+            self.results.log_fail("Profile Access with Valid Token", "No admin token available")
+            return False
+        
         # Test valid token access
         headers = self.get_auth_headers(self.admin_token)
         response, error = self.make_request("GET", "/me", headers=headers)
@@ -207,7 +211,7 @@ class PUCRSBackendTester:
             self.results.log_fail("Profile Access with Valid Token", error)
             return False
             
-        if response.get("email") != "admin@pucrs.edu.br":
+        if response.get("email") != self.admin_user["email"]:
             self.results.log_fail("Profile Access with Valid Token", "Incorrect user data")
             return False
             
