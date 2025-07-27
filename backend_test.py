@@ -83,9 +83,17 @@ class PUCRSBackendTester:
         """Test user registration for different roles"""
         print("\n🔐 Testing User Registration...")
         
+        # Clear existing data for fresh testing
+        try:
+            # Try to clear existing users to start fresh
+            import requests
+            requests.delete(f"{BACKEND_URL.replace('/api', '')}/clear-test-data", timeout=5)
+        except:
+            pass  # Ignore if endpoint doesn't exist
+        
         # Test admin registration
         admin_data = {
-            "email": "admin@pucrs.edu.br",
+            "email": f"admin.test.{int(time.time())}@pucrs.edu.br",
             "name": "Maria Silva",
             "password": "AdminPass123!",
             "role": "admin"
@@ -106,7 +114,7 @@ class PUCRSBackendTester:
         
         # Test student registration
         student_data = {
-            "email": "joao.santos@pucrs.edu.br",
+            "email": f"joao.santos.{int(time.time())}@pucrs.edu.br",
             "name": "João Santos",
             "password": "StudentPass123!",
             "role": "student"
@@ -123,7 +131,7 @@ class PUCRSBackendTester:
         
         # Test professor registration
         professor_data = {
-            "email": "prof.oliveira@pucrs.edu.br",
+            "email": f"prof.oliveira.{int(time.time())}@pucrs.edu.br",
             "name": "Prof. Carlos Oliveira",
             "password": "ProfPass123!",
             "role": "professor"
